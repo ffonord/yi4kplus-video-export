@@ -18,8 +18,8 @@ const ambaStopSession = 258
 type Client struct {
 	ip     string
 	port   string
-	conn   *net.Conn
 	token  int
+	conn   *net.Conn
 	reader *bufio.Reader
 }
 
@@ -36,14 +36,17 @@ type Request struct {
 }
 
 func NewClient(ip, port string) *Client {
-	return &Client{ip, port, nil, 0, nil}
+	return &Client{
+		ip:   ip,
+		port: port,
+	}
 }
 
-func (c *Client) Run() {
+func (c *Client) Run() error {
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", c.ip, c.port))
 
 	if err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("run: init connection failed: %w", err)
 	}
 
 	c.conn = &conn
@@ -52,18 +55,22 @@ func (c *Client) Run() {
 	log.Printf("Run connection with %s:%s", c.ip, c.port)
 
 	err = c.startSession()
-	c.handleError(err, "Session start")
+
+	if err != nil {
+		return fmt.Errorf("run: session start failed: %w", err)
+	}
+
+	return nil
 }
 
 func (c *Client) startSession() error {
 	res, err := c.sendRequest(Request{
 		MsgId: ambaStartSession,
 		Token: 0,
-		Param: "",
 	})
 
 	if err != nil {
-		return err
+		return fmt.Errorf("startSession: send request failed: %w", err)
 	}
 
 	log.Printf("Success session start with %s:%s", c.ip, c.port)
@@ -79,11 +86,10 @@ func (c *Client) stopSession() error {
 	_, err := c.sendRequest(Request{
 		MsgId: ambaStopSession,
 		Token: c.token,
-		Param: "",
 	})
 
 	if err != nil {
-		return err
+		return fmt.Errorf("stopSession: sendRequest failed: %w", err)
 	}
 
 	log.Printf("Success session stop with %s:%s", c.ip, c.port)
@@ -95,13 +101,13 @@ func (c *Client) sendRequest(request Request) (res Response, err error) {
 	rawRequest, err := json.Marshal(request)
 
 	if err != nil {
-		return
+		return res, fmt.Errorf("sendRequest: marshal failed: %w", err)
 	}
 
 	_, err = fmt.Fprintf(*c.conn, string(rawRequest)+"\n")
 
 	if err != nil {
-		return
+		return res, fmt.Errorf("sendRequest: fprintf to %s:%s failed: %w", c.ip, c.port, err)
 	}
 
 	return c.fetchResponse()
@@ -113,22 +119,33 @@ func (c *Client) fetchResponse() (res Response, err error) {
 	rawRes, err := c.reader.ReadString('}')
 
 	if err != nil {
-		return
+		return res, fmt.Errorf("fetchResponse: read string failed: %w", err)
 	}
 
 	err = json.Unmarshal([]byte(rawRes), &res)
 
+	if err != nil {
+		err = fmt.Errorf("fetchResponse: unmarshal failed: %w", err)
+	}
+
 	return res, err
 }
 
-func (c *Client) Stop() {
+func (c *Client) Stop() error {
 	err := c.stopSession()
-	c.handleError(err, "Session stop")
+
+	if err != nil {
+		return fmt.Errorf("stop: stop session failed: %w", err)
+	}
 
 	err = (*c.conn).Close()
-	c.handleError(err, "Close connection")
+	if err != nil {
+		return
+	}
 
 	log.Printf("Success closing connection with %s:%s", c.ip, c.port)
+
+	return nil
 }
 
 func (c *Client) handleError(e error, prefix string) {
