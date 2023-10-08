@@ -63,7 +63,7 @@ func (c *Client) configureLogger() error {
 }
 
 func (c *Client) errWrap(methodName, message string, err error) error {
-	return fmt.Errorf("ambaclient::%s: %s failed: %w", methodName, message, err)
+	return fmt.Errorf("\n\tambaclient::%s: %s failed: %w\n", methodName, message, err)
 }
 
 func (c *Client) Run(ctx context.Context) error {

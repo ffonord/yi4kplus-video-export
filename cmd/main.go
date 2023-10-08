@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"github.com/ffonord/yi4kplus-video-export/internal/app/amba"
+	"github.com/ffonord/yi4kplus-video-export/internal/app/ftp"
 	"github.com/ffonord/yi4kplus-video-export/internal/app/telnet"
 	"github.com/ffonord/yi4kplus-video-export/internal/pkg/logger"
 	"github.com/subosito/gotenv"
@@ -92,20 +93,41 @@ func main() {
 
 	go func() {
 		err := client.Run(ctx)
-		handleError(err, "remote api client run")
+		handleError(err, "amba client run")
 	}()
 
 	telnetConfig := telnet.NewConfig()
 	telnetClient := telnet.New(telnetConfig)
+	telnetReady := make(chan struct{})
 
 	go func() {
 		err := telnetClient.Run(ctx)
 		handleError(err, "telnet client run")
+		close(telnetReady)
+	}()
+
+	ftpConfig := ftp.NewConfig()
+	ftpClient := ftp.New(ftpConfig)
+
+	go func() {
+		<-telnetReady
+
+		err := ftpClient.Run(ctx)
+		handleError(err, "ftp client run")
+
 	}()
 
 	wait := gracefulShutdown(ctx, shutdownTimeOut, logger.New(), map[string]cleanupFunc{
-		"amba-client":   client.Shutdown,
-		"telnet-client": telnetClient.Shutdown,
+		"amba-client": client.Shutdown,
+		"ftp-telnet-clients": func(ctx context.Context) error {
+			ftpClientErr := ftpClient.Shutdown(ctx)
+
+			if err := telnetClient.Shutdown(ctx); err != nil {
+				return err
+			}
+
+			return ftpClientErr
+		},
 	})
 
 	<-wait

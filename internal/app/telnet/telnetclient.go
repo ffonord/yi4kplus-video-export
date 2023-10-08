@@ -10,20 +10,29 @@ import (
 )
 
 const (
-	startFtpServerCommand = "tcpsvd -u root -vE 0.0.0.0 21 ftpd -w /tmp/fuse_d/ 1>/dev/null 2>&1"
+	startFtpServerCmdFormat = "tcpsvd -u %s -vE 0.0.0.0 %s ftpd -w %s 1>/dev/null 2>&1"
 )
 
 type Client struct {
-	config *Config
-	logger *logger.Logger
-	conn   *net.Conn
-	reader *bufio.Reader
+	config            *Config
+	startFtpServerCmd string
+	logger            *logger.Logger
+	conn              *net.Conn
+	reader            *bufio.Reader
 }
 
 func New(config *Config) *Client {
+	startFtpServerCmd := fmt.Sprintf(
+		startFtpServerCmdFormat,
+		config.ftpServerUser,
+		config.ftpServerPort,
+		config.mediaDir,
+	)
+
 	return &Client{
-		config: config,
-		logger: logger.New(),
+		config:            config,
+		startFtpServerCmd: startFtpServerCmd,
+		logger:            logger.New(),
 	}
 }
 
@@ -45,7 +54,7 @@ func (c *Client) configureLogger() error {
 }
 
 func (c *Client) errWrap(methodName, message string, err error) error {
-	return fmt.Errorf("telnetclient::%s: %s failed: %w", methodName, message, err)
+	return fmt.Errorf("\n\ttelnetclient::%s: %s failed: %w\n", methodName, message, err)
 }
 
 func (c *Client) Run(ctx context.Context) error {
@@ -73,7 +82,7 @@ func (c *Client) Run(ctx context.Context) error {
 		return c.errWrap("Run", "start ftp server by telnet", err)
 	}
 
-	c.logger.Infof("Success start ftp server by telnet on %s:%s", c.config.host, "21")
+	c.logger.Infof("Success start ftp server by telnet on %s:%s", c.config.host, c.config.ftpServerPort)
 
 	return nil
 }
@@ -92,12 +101,13 @@ func (c *Client) login() error {
 }
 
 func (c *Client) startFtpServer() error {
-	_, err := c.sendRequest(startFtpServerCommand)
+	_, err := c.sendRequest(c.startFtpServerCmd)
 
 	if err != nil {
 		return c.errWrap("startFtpServer", "send start ftp request", err)
 	}
 
+	time.Sleep(1 * time.Second)
 	return nil
 }
 
