@@ -8,7 +8,7 @@ type Config struct {
 	user          string
 	ftpServerPort string
 	ftpServerUser string
-	mediaDir      string
+	ftpMediaDir   string
 	logLevel      string
 }
 
@@ -19,7 +19,7 @@ func NewConfig() *Config {
 		user:          os.Getenv("TELNET_SERVER_USER"),
 		ftpServerPort: os.Getenv("FTP_SERVER_PORT"),
 		ftpServerUser: os.Getenv("FTP_SERVER_USER"),
-		mediaDir:      os.Getenv("SERVER_MEDIA_DIR"),
+		ftpMediaDir:   os.Getenv("FTP_SERVER_MEDIA_DIR"),
 		logLevel:      os.Getenv("TELNET_SERVER_LOG_LEVEL"),
 	}
 }

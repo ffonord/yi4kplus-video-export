@@ -26,7 +26,7 @@ func New(config *Config) *Client {
 		startFtpServerCmdFormat,
 		config.ftpServerUser,
 		config.ftpServerPort,
-		config.mediaDir,
+		config.ftpMediaDir,
 	)
 
 	return &Client{
@@ -58,6 +58,13 @@ func (c *Client) errWrap(methodName, message string, err error) error {
 }
 
 func (c *Client) Run(ctx context.Context) error {
+	go func() {
+		err := c.Shutdown(ctx)
+		if err != nil {
+			c.logger.Errorf("Shutdown telnet adapter error: %s", err.Error())
+		}
+	}()
+
 	err := c.configureLogger()
 	if err != nil {
 		return c.errWrap("Run", "configure logger", err)
@@ -144,17 +151,18 @@ func (c *Client) fetchResponse() (res string, err error) {
 }
 
 func (c *Client) Shutdown(ctx context.Context) error {
+	<-ctx.Done()
+
 	if c.conn == nil {
 		return nil
 	}
 
 	err := (*c.conn).Close()
-
 	if err != nil {
 		return c.errWrap("Shutdown", "connection close", err)
 	}
 
-	c.logger.Infof("Success closing connection with %s:%s", c.config.host, c.config.port)
+	c.logger.Infof("Success closing telnet connection with %s:%s", c.config.host, c.config.port)
 
 	return nil
 }

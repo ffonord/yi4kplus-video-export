@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"flag"
-	"github.com/ffonord/yi4kplus-video-export/internal/app/amba"
-	"github.com/ffonord/yi4kplus-video-export/internal/app/ftp"
-	"github.com/ffonord/yi4kplus-video-export/internal/app/telnet"
-	"github.com/ffonord/yi4kplus-video-export/internal/pkg/logger"
+	"github.com/ffonord/yi4kplus-video-export/internal/adapters/media/yi4kplus"
+	"github.com/ffonord/yi4kplus-video-export/internal/adapters/media/yi4kplus/amba"
+	"github.com/ffonord/yi4kplus-video-export/internal/adapters/media/yi4kplus/ftp"
+	"github.com/ffonord/yi4kplus-video-export/internal/adapters/media/yi4kplus/telnet"
+	"github.com/ffonord/yi4kplus-video-export/internal/adapters/storage/local"
+	"github.com/ffonord/yi4kplus-video-export/internal/core/services"
 	"github.com/subosito/gotenv"
 	"log"
 	"os"
@@ -17,7 +19,8 @@ import (
 )
 
 const (
-	shutdownTimeOut = 5 * time.Second
+	autoShutdownTimeOut = time.Minute * 5
+	surveyPeriod        = time.Minute * 1
 )
 
 var (
@@ -28,110 +31,79 @@ func init() {
 	flag.StringVar(&envFilePath, "env-file-path", ".env", "path to .env file with variables")
 }
 
-// cleanupFunc is a cleanup function on shutting down
-type cleanupFunc func(ctx context.Context) error
-
-// gracefulShutdown waits for termination syscalls and doing clean up operations after received it
-// @see https://gist.github.com/aladhims/baea548df03be8f1a5f78a61636225f6
-func gracefulShutdown(ctx context.Context, timeout time.Duration, log *logger.Logger, ops map[string]cleanupFunc) <-chan struct{} {
-	wait := make(chan struct{})
-	go func() {
-		s := make(chan os.Signal, 1)
-
-		// add any other syscalls that you want to be notified with
-		signal.Notify(s, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-		<-s
-
-		log.Info("shutting down")
-
-		// set timeout for the ops to be done to prevent system hang
-		timeoutFunc := time.AfterFunc(timeout, func() {
-			log.Infof("timeout %d ms has been elapsed, force exit", timeout.Milliseconds())
-			os.Exit(0)
-		})
-
-		defer timeoutFunc.Stop()
-
-		var wg sync.WaitGroup
-
-		// Do the operations asynchronously to save time
-		for key, op := range ops {
-			wg.Add(1)
-			innerOp := op
-			innerKey := key
-			go func() {
-				defer wg.Done()
-
-				log.Infof("cleaning up: %s", innerKey)
-				if err := innerOp(ctx); err != nil {
-					log.Infof("%s: clean up failed: %s", innerKey, err.Error())
-					return
-				}
-
-				log.Infof("%s was shutdown gracefully", innerKey)
-			}()
-		}
-
-		wg.Wait()
-
-		close(wait)
-	}()
-
-	return wait
-}
-
 func main() {
 	flag.Parse()
 	err := gotenv.Load(envFilePath)
 	handleError(err, "gotenv load file")
 
+	me := initService()
+	var vg sync.WaitGroup
+
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	defer cancelFunc()
-
-	config := amba.NewConfig()
-	client := amba.New(config)
+	vg.Add(1)
 
 	go func() {
-		err := client.Run(ctx)
-		handleError(err, "amba client run")
+		defer vg.Done()
+
+		for {
+
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			err = me.ExportFiles(ctx)
+			waitTime := surveyPeriod
+
+			if err == nil {
+				waitTime = autoShutdownTimeOut
+			}
+
+			time.Sleep(waitTime)
+		}
 	}()
 
-	telnetConfig := telnet.NewConfig()
-	telnetClient := telnet.New(telnetConfig)
-	telnetReady := make(chan struct{})
+	wait(&vg, cancelFunc)
+}
 
-	go func() {
-		err := telnetClient.Run(ctx)
-		handleError(err, "telnet client run")
-		close(telnetReady)
-	}()
+func initService() *services.MediaExporter {
+
+	ambaConfig := amba.NewConfig()
+	ambaClient := amba.New(ambaConfig)
 
 	ftpConfig := ftp.NewConfig()
 	ftpClient := ftp.New(ftpConfig)
 
+	telnetConfig := telnet.NewConfig()
+	telnetClient := telnet.New(telnetConfig)
+
+	mediaDevice := yi4kplus.New(ambaClient, ftpClient, telnetClient)
+
+	storageConfig := local.NewConfig()
+	localStorage := local.NewStorage(storageConfig)
+
+	return services.NewMediaExporter(mediaDevice, localStorage)
+}
+
+func wait(vg *sync.WaitGroup, cancelFunc context.CancelFunc) {
+
+	s := make(chan os.Signal, 1)
+	signal.Notify(s, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	<-s
+
+	cancelFunc()
+
+	doneChan := make(chan struct{})
 	go func() {
-		<-telnetReady
-
-		err := ftpClient.Run(ctx)
-		handleError(err, "ftp client run")
-
+		vg.Wait()
+		close(doneChan)
 	}()
 
-	wait := gracefulShutdown(ctx, shutdownTimeOut, logger.New(), map[string]cleanupFunc{
-		"amba-client": client.Shutdown,
-		"ftp-telnet-clients": func(ctx context.Context) error {
-			ftpClientErr := ftpClient.Shutdown(ctx)
-
-			if err := telnetClient.Shutdown(ctx); err != nil {
-				return err
-			}
-
-			return ftpClientErr
-		},
-	})
-
-	<-wait
-	os.Exit(0)
+	select {
+	case <-time.After(time.Second * 10):
+	case <-doneChan:
+	}
 }
 
 func handleError(e error, message string) {

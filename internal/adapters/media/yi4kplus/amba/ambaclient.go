@@ -67,6 +67,13 @@ func (c *Client) errWrap(methodName, message string, err error) error {
 }
 
 func (c *Client) Run(ctx context.Context) error {
+	go func() {
+		err := c.Shutdown(ctx)
+		if err != nil {
+			c.logger.Errorf("Shutdown amba adapter failed error: %s", err.Error())
+		}
+	}()
+
 	err := c.configureLogger()
 	if err != nil {
 		return c.errWrap("Run", "configure logger", err)
@@ -141,6 +148,7 @@ func (c *Client) sendRequest(request Request) (res Response, err error) {
 func (c *Client) fetchResponse() (res Response, err error) {
 	res = Response{}
 
+	//TODO: добавить вычитывание по нужному msg_id (вычитывать, пока не получим нужную строку)
 	rawRes, err := c.reader.ReadString('}')
 
 	if err != nil {
@@ -157,6 +165,8 @@ func (c *Client) fetchResponse() (res Response, err error) {
 }
 
 func (c *Client) Shutdown(ctx context.Context) error {
+	<-ctx.Done()
+
 	if c.conn == nil {
 		return nil
 	}

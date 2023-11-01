@@ -30,3 +30,7 @@ func (l *Logger) Info(msg string) {
 func (l *Logger) Infof(format string, args ...interface{}) {
 	l.logger.Infof(format, args...)
 }
+
+func (l *Logger) Errorf(format string, args ...interface{}) {
+	l.logger.Errorf(format, args...)
+}
