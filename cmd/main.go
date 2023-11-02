@@ -83,6 +83,8 @@ func initService() *services.MediaExporter {
 	storageConfig := local.NewConfig()
 	localStorage := local.NewStorage(storageConfig)
 
+	localStorage.SessionStart(context.Background())
+
 	return services.NewMediaExporter(mediaDevice, localStorage)
 }
 
@@ -101,7 +103,7 @@ func wait(vg *sync.WaitGroup, cancelFunc context.CancelFunc) {
 	}()
 
 	select {
-	case <-time.After(time.Second * 10):
+	case <-time.After(time.Second * 3):
 	case <-doneChan:
 	}
 }
