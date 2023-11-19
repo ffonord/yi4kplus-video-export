@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/ffonord/yi4kplus-video-export/internal/pkg/logger"
+	"log/slog"
 	"net"
 )
 
@@ -18,12 +19,21 @@ const ambaStartSessionToken = 0
 const ambaStartSession = 257
 const ambaStopSession = 258
 
+type Conn interface {
+	net.Conn
+}
+
+type ConnFactory interface {
+	NewConn(host, port string) (Conn, error)
+}
+
 type Client struct {
-	config *Config
-	token  int
-	logger *logger.Logger
-	conn   *net.Conn
-	reader *bufio.Reader
+	config      *Config
+	token       int
+	logger      *logger.Logger
+	connFactory ConnFactory
+	conn        *Conn
+	reader      *bufio.Reader
 }
 
 type Response struct {
@@ -38,18 +48,21 @@ type Request struct {
 	Param string `json:"param"`
 }
 
-func New(config *Config) *Client {
+func New(config *Config, logger *logger.Logger, connFactory ConnFactory) *Client {
 	return &Client{
-		config: config,
-		logger: logger.New(),
+		config:      config,
+		logger:      logger,
+		connFactory: connFactory,
 	}
 }
 
 func (c *Client) configureConn() error {
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", c.config.host, c.config.port))
+	const op = "AmbaClient.configureConn"
+
+	conn, err := c.connFactory.NewConn(c.config.host, c.config.port)
 
 	if err != nil {
-		return c.errWrap("configureConn", "net dial", err)
+		return c.errWrap(op, "net dial", err)
 	}
 
 	c.conn = &conn
@@ -58,113 +71,136 @@ func (c *Client) configureConn() error {
 	return nil
 }
 
-func (c *Client) configureLogger() error {
-	return c.logger.SetLevel(c.config.logLevel)
-}
-
 func (c *Client) errWrap(methodName, message string, err error) error {
-	return fmt.Errorf("\n\tambaclient::%s: %s failed: %w\n", methodName, message, err)
+	return fmt.Errorf("%s: %s failed: %w", methodName, message, err)
 }
 
 func (c *Client) Run(ctx context.Context) error {
+	const op = "AmbaClient.Run"
+
+	log := c.logger.With(
+		slog.String("op", op),
+		slog.Any("config", c.config),
+	)
+
 	go func() {
 		err := c.Shutdown(ctx)
 		if err != nil {
-			c.logger.Errorf("Shutdown amba adapter failed error: %s", err.Error())
+			log.Info("Shutdown amba adapter failed: " + err.Error())
 		}
 	}()
 
-	err := c.configureLogger()
+	err := c.configureConn()
 	if err != nil {
-		return c.errWrap("Run", "configure logger", err)
+		return c.errWrap(op, "configure connection", err)
 	}
 
-	err = c.configureConn()
-	if err != nil {
-		return c.errWrap("Run", "configure connection", err)
-	}
-
-	c.logger.Infof("Run connection with %s:%s", c.config.host, c.config.port)
+	log.Info("Run connection")
 
 	err = c.startSession()
 
 	if err != nil {
-		return c.errWrap("Run", "session start", err)
+		return c.errWrap(op, "session start", err)
 	}
 
 	return nil
 }
 
 func (c *Client) startSession() error {
+	const op = "AmbaClient.startSession"
+
+	log := c.logger.With(
+		slog.String("op", op),
+		slog.Any("config", c.config),
+	)
+
 	res, err := c.sendRequest(Request{
 		MsgId: ambaStartSession,
 		Token: ambaStartSessionToken,
 	})
 
 	if err != nil {
-		return c.errWrap("startSession", "send start session request", err)
+		return c.errWrap(op, "send start session request", err)
 	}
 
-	c.logger.Infof("Success amba session start with %s:%s", c.config.host, c.config.port)
+	log.Info("Success amba session start")
 
 	c.token = res.Param
 
-	c.logger.Infof("Success fetch token: %d", c.token)
+	log.Info("Success fetch token")
 
 	return nil
 }
 
 func (c *Client) stopSession() error {
+	const op = "AmbaClient.stopSession"
+
+	log := c.logger.With(
+		slog.String("op", op),
+		slog.Any("config", c.config),
+	)
+
 	_, err := c.sendRequest(Request{
 		MsgId: ambaStopSession,
 		Token: c.token,
 	})
 
 	if err != nil {
-		return c.errWrap("stopSession", "send stop session request", err)
+		return c.errWrap(op, "send stop session request", err)
 	}
 
-	c.logger.Infof("Success session stop with %s:%s", c.config.host, c.config.port)
+	log.Info("Success session stop")
 
 	return nil
 }
 
 func (c *Client) sendRequest(request Request) (res Response, err error) {
+	const op = "AmbaClient.sendRequest"
+
 	rawRequest, err := json.Marshal(request)
 
 	if err != nil {
-		return res, c.errWrap("sendRequest", "json marshal", err)
+		return res, c.errWrap(op, "json marshal", err)
 	}
 
 	_, err = fmt.Fprintf(*c.conn, string(rawRequest)+"\n")
 
 	if err != nil {
-		return res, c.errWrap("sendRequest", "fprintf to connection", err)
+		return res, c.errWrap(op, "fprintf to connection", err)
 	}
 
 	return c.fetchResponse()
 }
 
 func (c *Client) fetchResponse() (res Response, err error) {
+	const op = "AmbaClient.fetchResponse"
+
 	res = Response{}
 
 	//TODO: добавить вычитывание по нужному msg_id (вычитывать, пока не получим нужную строку)
 	rawRes, err := c.reader.ReadString('}')
 
 	if err != nil {
-		return res, c.errWrap("fetchResponse", "reader read string", err)
+		return res, c.errWrap(op, "reader read string", err)
 	}
 
 	err = json.Unmarshal([]byte(rawRes), &res)
 
 	if err != nil {
-		err = c.errWrap("fetchResponse", "json unmarshal", err)
+		err = c.errWrap(op, "json unmarshal", err)
 	}
 
 	return res, err
 }
 
 func (c *Client) Shutdown(ctx context.Context) error {
+	const op = "AmbaClient.Shutdown"
+
+	log := c.logger.With(
+		slog.String("op", op),
+		slog.Any("config", c.config),
+	)
+
 	<-ctx.Done()
 
 	if c.conn == nil {
@@ -174,16 +210,16 @@ func (c *Client) Shutdown(ctx context.Context) error {
 	err := c.stopSession()
 
 	if err != nil {
-		return c.errWrap("Shutdown", "session stop", err)
+		return c.errWrap(op, "session stop", err)
 	}
 
 	err = (*c.conn).Close()
 
 	if err != nil {
-		return c.errWrap("Shutdown", "connection close", err)
+		return c.errWrap(op, "connection close", err)
 	}
 
-	c.logger.Infof("Success closing connection with %s:%s", c.config.host, c.config.port)
+	log.Info("Success closing connection")
 
 	return nil
 }

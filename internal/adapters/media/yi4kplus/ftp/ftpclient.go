@@ -3,32 +3,49 @@ package ftp
 import (
 	"context"
 	"fmt"
-	"github.com/ffonord/yi4kplus-video-export/internal/core/domain"
+	"github.com/ffonord/yi4kplus-video-export/internal/core/domain/file"
 	"github.com/ffonord/yi4kplus-video-export/internal/pkg/logger"
 	"github.com/jlaffaye/ftp"
 	"io"
+	"log/slog"
 	"time"
 )
 
-type Client struct {
-	config *Config
-	logger *logger.Logger
-	conn   *ftp.ServerConn
+type Conn interface {
+	NameList(path string) (entries []string, err error)
+	List(path string) (entries []*ftp.Entry, err error)
+	Retr(path string) (*ftp.Response, error)
+	Delete(path string) error
+	Login(user, password string) error
+	Quit() error
 }
 
-func New(config *Config) *Client {
+type ConnFactory interface {
+	NewConn(host, port string, timeout time.Duration) (Conn, error)
+}
+
+type Client struct {
+	config      *Config
+	logger      *logger.Logger
+	connFactory ConnFactory
+	conn        Conn
+}
+
+func New(config *Config, logger *logger.Logger, connFactory ConnFactory) *Client {
 	return &Client{
-		config: config,
-		logger: logger.New(),
+		config:      config,
+		logger:      logger,
+		connFactory: connFactory,
 	}
 }
 
 func (c *Client) configureConn() error {
-	addr := fmt.Sprintf("%s:%s", c.config.host, c.config.port)
-	conn, err := ftp.Dial(addr, ftp.DialWithTimeout(5*time.Second))
+	const op = "FtpClient.configureConn"
+
+	conn, err := c.connFactory.NewConn(c.config.host, c.config.port, 5*time.Second)
 
 	if err != nil {
-		return c.errWrap("configureConn", "ftp dial", err)
+		return c.errWrap(op, "ftp dial", err)
 	}
 
 	c.conn = conn
@@ -36,52 +53,53 @@ func (c *Client) configureConn() error {
 	return nil
 }
 
-func (c *Client) configureLogger() error {
-	return c.logger.SetLevel(c.config.logLevel)
-}
-
-func (c *Client) errWrap(methodName, message string, err error) error {
-	return fmt.Errorf("\n\tftpclient::%s: %s failed: %w\n", methodName, message, err)
-}
-
 func (c *Client) Run(ctx context.Context) error {
+	const op = "FtpClient.Run"
+
+	log := c.logger.With(
+		slog.String("op", op),
+		slog.Any("config", c.config),
+	)
+
 	go func() {
 		err := c.Shutdown(ctx)
 		if err != nil {
-			c.logger.Errorf("Shutdown ftp adapter failed error: %s", err.Error())
+			log.Info("Shutdown ftp adapter failed: " + err.Error())
 		}
 	}()
 
-	err := c.configureLogger()
+	err := c.configureConn()
 	if err != nil {
-		return c.errWrap("Run", "configure logger", err)
+		return c.errWrap(op, "configure connection", err)
 	}
 
-	err = c.configureConn()
-	if err != nil {
-		return c.errWrap("Run", "configure connection", err)
-	}
-
-	c.logger.Infof("Run connection with %s:%s", c.config.host, c.config.port)
+	log.Info("Run connection", c.config.host, c.config.port)
 
 	err = c.startSession()
 
 	if err != nil {
-		return c.errWrap("Run", "ftp session start", err)
+		return c.errWrap(op, "ftp session start", err)
 	}
 
-	c.logger.Infof("Success connection with ftp server %s:%s", c.config.host, c.config.port)
+	log.Info("Success connection")
 
 	return nil
 }
 
-func (c *Client) GetFiles(ctx context.Context) (<-chan *domain.File, error) {
+func (c *Client) GetFiles(ctx context.Context) (<-chan *file.File, error) {
+	const op = "FtpClient.GetFiles"
+
+	log := c.logger.With(
+		slog.String("op", op),
+		slog.Any("config", c.config),
+	)
+
 	mediaDirs, err := c.conn.NameList("")
 	if err != nil {
-		return nil, c.errWrap("GetFiles", "name list request", err)
+		return nil, c.errWrap(op, "name list request", err)
 	}
 
-	fileChan := make(chan *domain.File)
+	fileChan := make(chan *file.File)
 
 	go func() {
 		for _, dirName := range mediaDirs {
@@ -95,7 +113,7 @@ func (c *Client) GetFiles(ctx context.Context) (<-chan *domain.File, error) {
 				entries, err := c.conn.List(dirName)
 
 				if err != nil {
-					c.logger.Errorf("list request failed: %s", err.Error())
+					log.Error("list request failed: " + err.Error())
 					close(fileChan)
 					return
 				}
@@ -107,7 +125,7 @@ func (c *Client) GetFiles(ctx context.Context) (<-chan *domain.File, error) {
 						return
 					default:
 
-						fileChan <- domain.NewFile(
+						fileChan <- file.New(
 							entry.Name,
 							entry.Target,
 							entry.Time,
@@ -125,36 +143,54 @@ func (c *Client) GetFiles(ctx context.Context) (<-chan *domain.File, error) {
 }
 
 func (c *Client) GetReader(path string) (io.ReadCloser, error) {
+	const op = "FtpClient.GetReader"
+
 	response, err := c.conn.Retr(path)
 	if err != nil {
-		return nil, c.errWrap("GetReader", "send retr request: "+path, err)
+		return nil, c.errWrap(op, "send retr request: "+path, err)
 	}
 
 	return response, nil
 }
 
 func (c *Client) Delete(path string) error {
+	const op = "FtpClient.Delete"
+
 	err := c.conn.Delete(path)
 	if err != nil {
-		return c.errWrap("Delete", "send delete request file "+path, err)
+		return c.errWrap(op, "send delete request file "+path, err)
 	}
 
 	return nil
 }
 
 func (c *Client) startSession() error {
+	const op = "FtpClient.startSession"
+
+	log := c.logger.With(
+		slog.String("op", op),
+		slog.Any("config", c.config),
+	)
+
 	err := c.conn.Login(c.config.user, c.config.password)
 
 	if err != nil {
-		return c.errWrap("login", "send login request with user "+c.config.user, err)
+		return c.errWrap(op, "send login request with user "+c.config.user, err)
 	}
 
-	c.logger.Infof("Success ftp session start with %s:%s", c.config.host, c.config.port)
+	log.Info("Success ftp session start")
 
 	return nil
 }
 
 func (c *Client) Shutdown(ctx context.Context) error {
+	const op = "FtpClient.Shutdown"
+
+	log := c.logger.With(
+		slog.String("op", op),
+		slog.Any("config", c.config),
+	)
+
 	<-ctx.Done()
 
 	if c.conn == nil {
@@ -162,10 +198,14 @@ func (c *Client) Shutdown(ctx context.Context) error {
 	}
 
 	if err := c.conn.Quit(); err != nil {
-		return c.errWrap("Shutdown", "connection close ftp", err)
+		return c.errWrap(op, "connection close ftp", err)
 	}
 
-	c.logger.Infof("Success closing ftp connection with %s:%s", c.config.host, c.config.port)
+	log.Info("Success closing ftp connection")
 
 	return nil
+}
+
+func (c *Client) errWrap(methodName, message string, err error) error {
+	return fmt.Errorf("%s: %s failed: %w", methodName, message, err)
 }

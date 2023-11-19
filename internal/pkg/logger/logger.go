@@ -1,36 +1,35 @@
 package logger
 
-import "github.com/sirupsen/logrus"
+import (
+	"io"
+	"log/slog"
+	"os"
+)
+
+const (
+	EnvTest  = "test"
+	EnvLocal = "local"
+	EnvProd  = "prod"
+	EnvDev   = "dev"
+)
 
 type Logger struct {
-	logger *logrus.Logger
+	*slog.Logger
 }
 
-func New() *Logger {
-	return &Logger{
-		logger: logrus.New(),
+func New(env string) *Logger {
+	var log *slog.Logger
+
+	switch env {
+	case EnvTest:
+		log = slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	case EnvLocal:
+		log = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	case EnvDev:
+		log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	case EnvProd:
+		log = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
-}
 
-func (l *Logger) SetLevel(logLevel string) error {
-	level, err := logrus.ParseLevel(logLevel)
-	if err != nil {
-		return err
-	}
-
-	l.logger.SetLevel(level)
-
-	return nil
-}
-
-func (l *Logger) Info(msg string) {
-	l.logger.Info(msg)
-}
-
-func (l *Logger) Infof(format string, args ...interface{}) {
-	l.logger.Infof(format, args...)
-}
-
-func (l *Logger) Errorf(format string, args ...interface{}) {
-	l.logger.Errorf(format, args...)
+	return &Logger{log}
 }

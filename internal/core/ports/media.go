@@ -2,13 +2,13 @@ package ports
 
 import (
 	"context"
-	"github.com/ffonord/yi4kplus-video-export/internal/core/domain"
+	"github.com/ffonord/yi4kplus-video-export/internal/core/domain/file"
 	"io"
 )
 
 type Media interface {
 	SessionStart(ctx context.Context) error
-	GetFiles(ctx context.Context) (<-chan *domain.File, error)
-	GetReader(f *domain.File) (io.ReadCloser, error)
-	Delete(f *domain.File) error
+	GetFiles(ctx context.Context) (<-chan *file.File, error)
+	GetReader(f *file.File) (io.ReadCloser, error)
+	Delete(f *file.File) error
 }

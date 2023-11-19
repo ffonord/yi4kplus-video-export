@@ -7,7 +7,6 @@ type Config struct {
 	port     string
 	user     string
 	password string
-	logLevel string
 }
 
 func NewConfig() *Config {
@@ -16,6 +15,5 @@ func NewConfig() *Config {
 		port:     os.Getenv("FTP_SERVER_PORT"),
 		user:     os.Getenv("FTP_SERVER_USER"),
 		password: os.Getenv("FTP_SERVER_PASSWORD"),
-		logLevel: os.Getenv("FTP_SERVER_LOG_LEVEL"),
 	}
 }

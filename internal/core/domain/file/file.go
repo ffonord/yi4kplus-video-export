@@ -1,4 +1,4 @@
-package domain
+package file
 
 import "time"
 
@@ -9,7 +9,7 @@ type File struct {
 	Size uint64
 }
 
-func NewFile(
+func New(
 	name string,
 	path string,
 	time time.Time,

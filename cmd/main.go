@@ -2,13 +2,9 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
-	"github.com/ffonord/yi4kplus-video-export/internal/adapters/media/yi4kplus"
-	"github.com/ffonord/yi4kplus-video-export/internal/adapters/media/yi4kplus/amba"
-	"github.com/ffonord/yi4kplus-video-export/internal/adapters/media/yi4kplus/ftp"
-	"github.com/ffonord/yi4kplus-video-export/internal/adapters/media/yi4kplus/telnet"
-	"github.com/ffonord/yi4kplus-video-export/internal/adapters/storage/local"
-	"github.com/ffonord/yi4kplus-video-export/internal/core/services"
+	"github.com/ffonord/yi4kplus-video-export/internal/app"
 	"github.com/subosito/gotenv"
 	"log"
 	"os"
@@ -21,6 +17,7 @@ import (
 const (
 	autoShutdownTimeOut = time.Minute * 5
 	surveyPeriod        = time.Minute * 1
+	cancelTimeout       = time.Second * 3
 )
 
 var (
@@ -32,64 +29,30 @@ func init() {
 }
 
 func main() {
-	flag.Parse()
-	err := gotenv.Load(envFilePath)
-	handleError(err, "gotenv load file")
+	handleError(loadDotEnvFile(), "gotenv load file")
 
-	me := initService()
-	var vg sync.WaitGroup
+	apl := app.New(os.Getenv("ENV"))
+	var wg sync.WaitGroup
 
 	ctx, cancelFunc := context.WithCancel(context.Background())
-	vg.Add(1)
+	wg.Add(1)
 
 	go func() {
-		defer vg.Done()
+		defer wg.Done()
 
-		for {
-
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-
-			err = me.ExportFiles(ctx)
-			waitTime := surveyPeriod
-
-			if err == nil {
-				waitTime = autoShutdownTimeOut
-			}
-
-			time.Sleep(waitTime)
-		}
+		err := apl.MediaExporter.Run(ctx, surveyPeriod, autoShutdownTimeOut)
+		apl.Logger.Error(errors.Unwrap(err).Error())
 	}()
 
-	wait(&vg, cancelFunc)
+	wait(&wg, cancelFunc)
 }
 
-func initService() *services.MediaExporter {
-
-	ambaConfig := amba.NewConfig()
-	ambaClient := amba.New(ambaConfig)
-
-	ftpConfig := ftp.NewConfig()
-	ftpClient := ftp.New(ftpConfig)
-
-	telnetConfig := telnet.NewConfig()
-	telnetClient := telnet.New(telnetConfig)
-
-	mediaDevice := yi4kplus.New(ambaClient, ftpClient, telnetClient)
-
-	storageConfig := local.NewConfig()
-	localStorage := local.NewStorage(storageConfig)
-
-	localStorage.SessionStart(context.Background())
-
-	return services.NewMediaExporter(mediaDevice, localStorage)
+func loadDotEnvFile() error {
+	flag.Parse()
+	return gotenv.Load(envFilePath)
 }
 
-func wait(vg *sync.WaitGroup, cancelFunc context.CancelFunc) {
-
+func wait(wg *sync.WaitGroup, cancelFunc context.CancelFunc) {
 	s := make(chan os.Signal, 1)
 	signal.Notify(s, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	<-s
@@ -98,12 +61,12 @@ func wait(vg *sync.WaitGroup, cancelFunc context.CancelFunc) {
 
 	doneChan := make(chan struct{})
 	go func() {
-		vg.Wait()
+		wg.Wait()
 		close(doneChan)
 	}()
 
 	select {
-	case <-time.After(time.Second * 3):
+	case <-time.After(cancelTimeout):
 	case <-doneChan:
 	}
 }
