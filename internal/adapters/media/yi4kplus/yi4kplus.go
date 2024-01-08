@@ -63,9 +63,10 @@ func (y *Yi4kPlus) GetFiles(ctx context.Context) (<-chan *file.File, error) {
 func (y *Yi4kPlus) GetReader(f *file.File) (io.ReadCloser, error) {
 	const op = "Yi4kPlus.GetReader"
 
-	reader, err := y.ftpClient.GetReader(f.Path)
+	filepath := f.Path + "/" + f.Name
+	reader, err := y.ftpClient.GetReader(filepath)
 	if err != nil {
-		return nil, y.errWrap(op, "ftp get reader "+f.Path, err)
+		return nil, y.errWrap(op, "ftp get reader "+filepath, err)
 	}
 	return reader, nil
 }
@@ -73,9 +74,10 @@ func (y *Yi4kPlus) GetReader(f *file.File) (io.ReadCloser, error) {
 func (y *Yi4kPlus) Delete(f *file.File) error {
 	const op = "Yi4kPlus.Delete"
 
-	err := y.ftpClient.Delete(f.Path)
+	filepath := f.Path + "/" + f.Name
+	err := y.ftpClient.Delete(filepath)
 	if err != nil {
-		return y.errWrap(op, "ftp delete "+f.Path, err)
+		return y.errWrap(op, "ftp delete "+filepath, err)
 	}
 
 	return nil

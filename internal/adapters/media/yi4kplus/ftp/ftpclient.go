@@ -131,7 +131,7 @@ func (c *Client) GetFiles(ctx context.Context) (<-chan *file.File, error) {
 
 						fileChan <- file.New(
 							entry.Name,
-							entry.Target,
+							dirName,
 							entry.Time,
 							entry.Size,
 						)
@@ -204,6 +204,8 @@ func (c *Client) Shutdown(ctx context.Context) error {
 	if err := c.conn.Quit(); err != nil {
 		return c.errWrap(op, "connection close ftp", err)
 	}
+
+	c.conn = nil
 
 	log.Info("Success closing ftp connection")
 

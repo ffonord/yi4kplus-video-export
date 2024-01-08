@@ -62,27 +62,28 @@ func (s *Storage) SessionStart(ctx context.Context) error {
 func (s *Storage) GetWriter(f *file.File) (io.WriteCloser, error) {
 	const op = "Storage.GetWriter"
 
-	//TODO: добавить корневую директорию сохранения
-	file, err := os.Open(f.Path)
+	filepath := s.config.storageDir + "/" + f.Name
+	err := os.Remove(filepath)
 
-	if os.IsNotExist(err) {
-		file, err = os.Create(f.Path)
+	if os.IsNotExist(err) || err == nil {
+		localFile, err := os.Create(filepath)
 		if err != nil {
-			return nil, s.errWrap(op, "os create", err)
+			return nil, s.errWrap(op, "os create, path: "+filepath, err)
 		}
-	} else if err != nil {
-		return nil, s.errWrap(op, "os open", err)
+
+		return localFile, nil
 	}
 
-	return file, nil
+	return nil, s.errWrap(op, "os remove, path: "+filepath, err)
 }
 
 func (s *Storage) Delete(f *file.File) error {
 	const op = "Storage.Delete"
 
-	err := os.Remove(f.Path)
+	filepath := s.config.storageDir + "/" + f.Name
+	err := os.Remove(filepath)
 	if err != nil {
-		return s.errWrap(op, "os remove", err)
+		return s.errWrap(op, "os remove, path: "+filepath, err)
 	}
 
 	return nil

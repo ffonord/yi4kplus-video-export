@@ -216,6 +216,9 @@ func (c *Client) Shutdown(ctx context.Context) error {
 		return c.errWrap(op, "connection close", err)
 	}
 
+	c.conn = nil
+	c.reader = nil
+
 	log.Info("Success closing telnet connection")
 
 	return nil

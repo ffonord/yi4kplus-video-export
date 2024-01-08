@@ -113,7 +113,7 @@ func (e *MediaExporter) ExportFiles(ctx context.Context) error {
 				return e.errWrap(op, "media adapter delete", err)
 			}
 
-			log.Info("Success downloaded: " + f.Name)
+			log.Info("Success pop file: " + f.Name)
 		} else {
 			err := e.storageAdapter.Delete(f)
 			if err != nil {

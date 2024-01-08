@@ -130,8 +130,8 @@ func TestClient_GetFiles(t *testing.T) {
 	}
 
 	mediaFiles := []*bftp.Entry{
-		{Target: mediaDirs[0] + "/video1.mp4"},
-		{Target: mediaDirs[0] + "/video2.mp4"},
+		{Target: "", Name: "video1.mp4"},
+		{Target: "", Name: "video2.mp4"},
 	}
 
 	mc.EXPECT().
@@ -159,7 +159,8 @@ func TestClient_GetFiles(t *testing.T) {
 
 	fileNumber := 0
 	for file := range cf {
-		assert.Equal(t, mediaFiles[fileNumber].Target, file.Path)
+		assert.Equal(t, mediaDirs[0], file.Path)
+		assert.Equal(t, mediaFiles[fileNumber].Name, file.Name)
 		fileNumber++
 	}
 

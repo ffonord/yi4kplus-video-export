@@ -11,9 +11,8 @@ type Config struct {
 
 func NewConfig() *Config {
 	return &Config{
-		host:     os.Getenv("FTP_SERVER_HOST"),
-		port:     os.Getenv("FTP_SERVER_PORT"),
-		user:     os.Getenv("FTP_SERVER_USER"),
-		password: os.Getenv("FTP_SERVER_PASSWORD"),
+		host: os.Getenv("FTP_SERVER_HOST"),
+		port: os.Getenv("FTP_SERVER_PORT"),
+		user: os.Getenv("FTP_SERVER_USER"),
 	}
 }

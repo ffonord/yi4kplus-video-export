@@ -22,14 +22,14 @@ func TestStorage_SessionStart(t *testing.T) {
 func TestStorage_GetWriter(t *testing.T) {
 	storage := New(NewConfig(), logger.New(logger.EnvTest))
 
-	storage.config.storageDir = "./"
+	storage.config.storageDir = "."
 
 	filePath := "./test_write.file"
 	fileContent := "some content"
 
 	f := file.New(
-		"test_file_name",
-		filePath,
+		"test_write.file",
+		"./",
 		time.Now(),
 		uint64(len(fileContent)),
 	)
@@ -42,13 +42,14 @@ func TestStorage_GetWriter(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, len(fileContent), w)
 
-	_ = os.Remove(filePath)
+	err = os.Remove(filePath)
+	assert.Nil(t, err)
 }
 
 func TestStorage_Delete(t *testing.T) {
 	storage := New(NewConfig(), logger.New(logger.EnvTest))
 
-	storage.config.storageDir = "./"
+	storage.config.storageDir = "."
 
 	filePath := "./test_delete.file"
 	fileContent := "some content"
@@ -56,8 +57,8 @@ func TestStorage_Delete(t *testing.T) {
 	_ = os.WriteFile(filePath, []byte(fileContent), 0644)
 
 	f := file.New(
-		"test_file_name",
-		filePath,
+		"test_delete.file",
+		"./",
 		time.Now(),
 		uint64(len(fileContent)),
 	)
