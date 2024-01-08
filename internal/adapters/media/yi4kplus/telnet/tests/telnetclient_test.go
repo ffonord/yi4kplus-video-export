@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 	"testing"
+	"time"
 )
 
 func TestClient_Run(t *testing.T) {
@@ -47,6 +48,29 @@ func TestClient_Run(t *testing.T) {
 	tc := telnet.New(c, l, mcf, mrf)
 
 	err := tc.Run(context.Background())
+
+	assert.Nil(t, err)
+}
+
+func TestClient_Shutdown(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mcf := mocks.NewMockConnFactory(ctrl)
+	mrf := mocks.NewMockReaderFactory(ctrl)
+
+	c := telnet.NewConfig()
+	l := logger.New(logger.EnvLocal)
+
+	tc := telnet.New(c, l, mcf, mrf)
+
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(1 * time.Second)
+		cancelFunc()
+	}()
+
+	err := tc.Shutdown(ctx)
 
 	assert.Nil(t, err)
 }

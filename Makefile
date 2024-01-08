@@ -12,13 +12,13 @@ test:
 
 MOCKS_PREFIX=mocks
 .PHONY: mocks
-mocks: internal/adapters/media/yi4kplus/telnet/telnetclient.go
+mocks: internal/adapters/media/yi4kplus/telnet/telnetclient.go \
+	internal/adapters/media/yi4kplus/ftp/ftpclient.go
 	@echo "Generating mocks..."
-	@rm -rf $(MOCKS_DESTINATION)
-	@for file in $^; do mockgen -source=$$file -destination=$(MOCKS_PREFIX)/$$file; done
-
-#TODO: написать команду генерации моков, на основе этого пример:
-#mockgen -source=telnetclient.go -destination=$(MOCKS_PREFIX)/telnetclient.go -package=$(MOCKS_PREFIX)
-#mockgen -source=telnetclient.go -destination=mocks/telnetclient.go -package=mocks
+	@for filepath in $^; \
+		do \
+		  	dst=$$(dirname $$filepath)/$(MOCKS_PREFIX)/$$(basename $$filepath); \
+			mockgen -package=$(MOCKS_PREFIX) -source=$$filepath -destination=$${dst}; \
+		done
 
 .DEFAULT_GOAL := build
