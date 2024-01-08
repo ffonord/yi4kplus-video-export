@@ -7,7 +7,7 @@ run:
 	go run ./cmd/main.go
 
 .PHONY: test
-test:
+test: mocks
 	CGO_ENABLED=1 go test -race -v -timeout 30s ./...
 
 MOCKS_PREFIX=mocks

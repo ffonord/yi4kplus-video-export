@@ -39,8 +39,12 @@ func New(config *Config, logger *logger.Logger, connFactory ConnFactory) *Client
 	}
 }
 
-func (c *Client) configureConn() error {
-	const op = "FtpClient.configureConn"
+func (c *Client) ConfigureConn() error {
+	if c.conn != nil {
+		return nil
+	}
+
+	const op = "FtpClient.ConfigureConn"
 
 	conn, err := c.connFactory.NewConn(c.config.host, c.config.port, 5*time.Second)
 
@@ -68,7 +72,7 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 	}()
 
-	err := c.configureConn()
+	err := c.ConfigureConn()
 	if err != nil {
 		return c.errWrap(op, "configure connection", err)
 	}

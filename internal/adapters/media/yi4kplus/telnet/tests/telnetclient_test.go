@@ -11,6 +11,8 @@ import (
 	"time"
 )
 
+const loggerEnv = logger.EnvTest
+
 func TestClient_Run(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -43,7 +45,7 @@ func TestClient_Run(t *testing.T) {
 		Return(mr)
 
 	c := telnet.NewConfig()
-	l := logger.New(logger.EnvLocal)
+	l := logger.New(loggerEnv)
 
 	tc := telnet.New(c, l, mcf, mrf)
 
@@ -60,7 +62,7 @@ func TestClient_Shutdown(t *testing.T) {
 	mrf := mocks.NewMockReaderFactory(ctrl)
 
 	c := telnet.NewConfig()
-	l := logger.New(logger.EnvLocal)
+	l := logger.New(loggerEnv)
 
 	tc := telnet.New(c, l, mcf, mrf)
 
