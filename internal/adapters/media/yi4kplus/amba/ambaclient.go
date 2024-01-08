@@ -1,7 +1,6 @@
 package amba
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,13 +26,22 @@ type ConnFactory interface {
 	NewConn(host, port string) (Conn, error)
 }
 
+type Reader interface {
+	ReadString(delim byte) (string, error)
+}
+
+type ReaderFactory interface {
+	NewReader(Conn) Reader
+}
+
 type Client struct {
-	config      *Config
-	token       int
-	logger      *logger.Logger
-	connFactory ConnFactory
-	conn        *Conn
-	reader      *bufio.Reader
+	config        *Config
+	token         int
+	logger        *logger.Logger
+	connFactory   ConnFactory
+	readerFactory ReaderFactory
+	conn          Conn
+	reader        Reader
 }
 
 type Response struct {
@@ -48,16 +56,22 @@ type Request struct {
 	Param string `json:"param"`
 }
 
-func New(config *Config, logger *logger.Logger, connFactory ConnFactory) *Client {
+func New(
+	config *Config,
+	logger *logger.Logger,
+	connFactory ConnFactory,
+	readerFactory ReaderFactory,
+) *Client {
 	return &Client{
-		config:      config,
-		logger:      logger,
-		connFactory: connFactory,
+		config:        config,
+		logger:        logger,
+		connFactory:   connFactory,
+		readerFactory: readerFactory,
 	}
 }
 
-func (c *Client) configureConn() error {
-	const op = "AmbaClient.configureConn"
+func (c *Client) ConfigureConn() error {
+	const op = "AmbaClient.ConfigureConn"
 
 	conn, err := c.connFactory.NewConn(c.config.host, c.config.port)
 
@@ -65,8 +79,8 @@ func (c *Client) configureConn() error {
 		return c.errWrap(op, "net dial", err)
 	}
 
-	c.conn = &conn
-	c.reader = bufio.NewReader(conn)
+	c.conn = conn
+	c.reader = c.readerFactory.NewReader(conn)
 
 	return nil
 }
@@ -90,7 +104,7 @@ func (c *Client) Run(ctx context.Context) error {
 		}
 	}()
 
-	err := c.configureConn()
+	err := c.ConfigureConn()
 	if err != nil {
 		return c.errWrap(op, "configure connection", err)
 	}
@@ -163,7 +177,7 @@ func (c *Client) sendRequest(request Request) (res Response, err error) {
 		return res, c.errWrap(op, "json marshal", err)
 	}
 
-	_, err = fmt.Fprintf(*c.conn, string(rawRequest)+"\n")
+	_, err = fmt.Fprintf(c.conn, string(rawRequest)+"\n")
 
 	if err != nil {
 		return res, c.errWrap(op, "fprintf to connection", err)
@@ -177,7 +191,7 @@ func (c *Client) fetchResponse() (res Response, err error) {
 
 	res = Response{}
 
-	//TODO: добавить вычитывание по нужному msg_id (вычитывать, пока не получим нужную строку)
+	//TODO: добавить вычитывание по нужному msg_id (например, можно вычитывать пока не получим нужную строку)
 	rawRes, err := c.reader.ReadString('}')
 
 	if err != nil {
@@ -213,7 +227,7 @@ func (c *Client) Shutdown(ctx context.Context) error {
 		return c.errWrap(op, "session stop", err)
 	}
 
-	err = (*c.conn).Close()
+	err = c.conn.Close()
 
 	if err != nil {
 		return c.errWrap(op, "connection close", err)

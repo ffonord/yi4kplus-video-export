@@ -12,8 +12,9 @@ test: mocks
 
 MOCKS_PREFIX=mocks
 .PHONY: mocks
-mocks: internal/adapters/media/yi4kplus/telnet/telnetclient.go \
-	internal/adapters/media/yi4kplus/ftp/ftpclient.go
+mocks: internal/adapters/media/yi4kplus/amba/ambaclient.go \
+	internal/adapters/media/yi4kplus/ftp/ftpclient.go \
+	internal/adapters/media/yi4kplus/telnet/telnetclient.go
 	@echo "Generating mocks..."
 	@for filepath in $^; \
 		do \

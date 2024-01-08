@@ -19,8 +19,9 @@ func New(env string) *App {
 	log := logger.New(env)
 
 	ambaTCPConnFactory := new(amba.NetTCPConnFactory)
+	ambaBufioReaderFactory := new(amba.BufioReaderFactory)
 	ambaConfig := amba.NewConfig()
-	ambaClient := amba.New(ambaConfig, log, ambaTCPConnFactory)
+	ambaClient := amba.New(ambaConfig, log, ambaTCPConnFactory, ambaBufioReaderFactory)
 
 	telnetTCPConnFactory := new(telnet.NetTCPConnFactory)
 	telnetBufioReaderFactory := new(telnet.BufioReaderFactory)

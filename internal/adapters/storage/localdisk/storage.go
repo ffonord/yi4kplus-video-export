@@ -62,6 +62,7 @@ func (s *Storage) SessionStart(ctx context.Context) error {
 func (s *Storage) GetWriter(f *file.File) (io.WriteCloser, error) {
 	const op = "Storage.GetWriter"
 
+	//TODO: добавить корневую директорию сохранения
 	file, err := os.Open(f.Path)
 
 	if os.IsNotExist(err) {
