@@ -28,6 +28,9 @@ func init() {
 	flag.StringVar(&envFilePath, "env-file-path", ".env", "path to .env file with variables")
 }
 
+// TODO: добавить команду декодирования через ffmpeg
+// пример запуска из golang приложения: https://gist.github.com/tpanum/374ca0a415a5d94ffcd9
+// пример команды `ffmpeg -i Y0030857.MP4 -vcodec libx265 -crf 28 output.mp4` - размер файла уменьшился в ~20 раз
 func main() {
 	handleError(loadDotEnvFile(), "gotenv load file")
 
