@@ -6,12 +6,15 @@ import (
 	"github.com/ffonord/yi4kplus-video-export/internal/adapters/media/yi4kplus/ftp"
 	"github.com/ffonord/yi4kplus-video-export/internal/adapters/media/yi4kplus/telnet"
 	"github.com/ffonord/yi4kplus-video-export/internal/adapters/storage/localdisk"
+	"github.com/ffonord/yi4kplus-video-export/internal/core/ports"
+	"github.com/ffonord/yi4kplus-video-export/internal/core/services/filehandler"
 	"github.com/ffonord/yi4kplus-video-export/internal/core/services/mediaexporter"
 	"github.com/ffonord/yi4kplus-video-export/internal/pkg/logger"
 )
 
 type App struct {
 	MediaExporter *mediaexporter.MediaExporter
+	FileHandler   *filehandler.FileHandler
 	Logger        *logger.Logger
 }
 
@@ -39,8 +42,14 @@ func New(env string) *App {
 
 	me := mediaexporter.New(mediaDevice, storage, log)
 
+	encoders := map[string]ports.Encoder{}
+
+	fileHandlerConfig := filehandler.NewConfig()
+	fh := filehandler.New(fileHandlerConfig, log, encoders)
+
 	return &App{
 		MediaExporter: me,
+		FileHandler:   fh,
 		Logger:        log,
 	}
 }
